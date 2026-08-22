@@ -147,7 +147,7 @@ public:
                 "Could not bind the API server to " + host_ + ':' + std::to_string(port_));
         }
         started_ = true;
-        thread_ = std::jthread([this] {
+        thread_ = std::thread([this] {
             if (!server_.listen_after_bind()) {
                 std::cerr << "linkd: HTTP server stopped after a listening error\n";
             }
@@ -253,7 +253,7 @@ private:
     std::string host_;
     std::uint16_t port_;
     httplib::Server server_;
-    std::jthread thread_;
+    std::thread thread_;
     bool started_ = false;
 };
 

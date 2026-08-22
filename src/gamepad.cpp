@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -50,10 +51,13 @@ class GamepadInput::Implementation {
 public:
     explicit Implementation(CameraController& controller)
         : controller_(controller),
-          thread_([this](std::stop_token stop_token) { run(stop_token); }) {}
+          thread_([this] { run(); }) {}
 
     ~Implementation() {
-        thread_.request_stop();
+        stop_requested_.store(true);
+        if (thread_.joinable()) {
+            thread_.join();
+        }
     }
 
 private:
@@ -127,7 +131,7 @@ private:
         tracking_was_pressed_ = tracking_pressed;
     }
 
-    void run(std::stop_token stop_token) {
+    void run() {
         if (!SDL_Init(SDL_INIT_GAMEPAD)) {
             std::cerr << "linkd: SDL gamepad initialization failed: " << SDL_GetError() << '\n';
             return;
@@ -135,7 +139,7 @@ private:
 
         auto next_reconnect = std::chrono::steady_clock::now();
         auto previous = next_reconnect;
-        while (!stop_token.stop_requested()) {
+        while (!stop_requested_.load()) {
             SDL_PumpEvents();
             const auto now = std::chrono::steady_clock::now();
 
@@ -172,7 +176,8 @@ private:
     bool center_was_pressed_ = false;
     bool tracking_was_pressed_ = false;
     bool stick_was_active_ = false;
-    std::jthread thread_;
+    std::atomic_bool stop_requested_{false};
+    std::thread thread_;
 };
 
 GamepadInput::GamepadInput(CameraController& controller)

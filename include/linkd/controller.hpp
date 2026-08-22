@@ -2,6 +2,7 @@
 
 #include "linkd/camera.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -32,7 +33,7 @@ public:
     void set_velocity(Velocity velocity);
 
 private:
-    void motion_loop(std::stop_token stop_token);
+    void motion_loop();
 
     std::unique_ptr<CameraBackend> camera_;
     mutable std::mutex mutex_;
@@ -40,7 +41,8 @@ private:
     Velocity velocity_;
     std::chrono::steady_clock::time_point velocity_expires_at_{};
     std::optional<std::string> background_error_;
-    std::jthread motion_thread_;
+    std::atomic_bool stop_requested_{false};
+    std::thread motion_thread_;
 };
 
 }  // namespace linkd

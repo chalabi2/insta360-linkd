@@ -33,13 +33,14 @@ CameraController::CameraController(std::unique_ptr<CameraBackend> camera)
     : camera_(std::move(camera)),
       velocity_(stopped_velocity()) {
     state_ = camera_->read_state();
-    motion_thread_ = std::jthread([this](std::stop_token stop_token) {
-        motion_loop(stop_token);
-    });
+    motion_thread_ = std::thread([this] { motion_loop(); });
 }
 
 CameraController::~CameraController() {
-    motion_thread_.request_stop();
+    stop_requested_.store(true);
+    if (motion_thread_.joinable()) {
+        motion_thread_.join();
+    }
 }
 
 const UsbIdentity& CameraController::identity() const noexcept {
@@ -103,11 +104,11 @@ void CameraController::set_velocity(Velocity velocity) {
     velocity_expires_at_ = std::chrono::steady_clock::now() + kVelocityLease;
 }
 
-void CameraController::motion_loop(std::stop_token stop_token) {
+void CameraController::motion_loop() {
     auto previous = std::chrono::steady_clock::now();
     bool was_moving = false;
 
-    while (!stop_token.stop_requested()) {
+    while (!stop_requested_.load()) {
         std::this_thread::sleep_for(kMotionInterval);
         const auto now = std::chrono::steady_clock::now();
         std::scoped_lock lock(mutex_);

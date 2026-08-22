@@ -249,7 +249,7 @@ public:
             throw CameraError("Could not bind the gRPC server to " + endpoint_);
         }
         port_ = static_cast<std::uint16_t>(selected_port);
-        thread_ = std::jthread([this] { server_->Wait(); });
+        thread_ = std::thread([this] { server_->Wait(); });
         return port_;
     }
 
@@ -268,7 +268,7 @@ private:
     LinkControlService service_;
     std::string endpoint_;
     std::unique_ptr<grpc::Server> server_;
-    std::jthread thread_;
+    std::thread thread_;
     std::uint16_t port_ = 0;
 };
 
