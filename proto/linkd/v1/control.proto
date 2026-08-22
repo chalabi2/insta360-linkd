@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package insta360.linkd.v1;
+
+service LinkControl {
+  rpc GetStatus(StatusRequest) returns (CameraState);
+  rpc GetCapabilities(CapabilitiesRequest) returns (CameraCapabilities);
+  rpc Publish(ControlCommand) returns (PublishReply);
+  rpc Subscribe(SubscribeRequest) returns (stream CameraState);
+}
+
+message StatusRequest {}
+
+message CapabilitiesRequest {}
+
+message Position {
+  double pan_degrees = 1;
+  double tilt_degrees = 2;
+}
+
+message Velocity {
+  double pan_degrees_per_second = 1;
+  double tilt_degrees_per_second = 2;
+}
+
+message Zoom {
+  double ratio = 1;
+}
+
+message Tracking {
+  bool enabled = 1;
+}
+
+message Center {}
+
+message ControlCommand {
+  oneof action {
+    Position position = 1;
+    Velocity velocity = 2;
+    Zoom zoom = 3;
+    Tracking tracking = 4;
+    Center center = 5;
+  }
+}
+
+message PublishReply {
+  bool accepted = 1;
+  uint32 velocity_lease_ms = 2;
+  CameraState state = 3;
+}
+
+message SubscribeRequest {
+  uint32 interval_ms = 1;
+}
+
+message CameraState {
+  string camera_name = 1;
+  uint32 usb_vendor_id = 2;
+  uint32 usb_product_id = 3;
+  Position position = 4;
+  double zoom_ratio = 5;
+  bool tracking_enabled = 6;
+  string background_error = 7;
+}
+
+message NumericRange {
+  double minimum = 1;
+  double maximum = 2;
+  double step = 3;
+}
+
+message CameraCapabilities {
+  NumericRange pan_degrees = 1;
+  NumericRange tilt_degrees = 2;
+  NumericRange zoom_ratio = 3;
+  bool supports_tracking = 4;
+  uint32 velocity_lease_ms = 5;
+  bool requires_active_video = 6;
+}

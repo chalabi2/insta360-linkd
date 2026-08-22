@@ -1,0 +1,4 @@
+/build/
+/build-*/
+/out/
+.DS_Store

@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  darwin-arm64:
+    name: Darwin arm64
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DLINKD_BUILD_TESTS=ON
+          -DLINKD_ENABLE_GRPC=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="insta360-linkd-${GITHUB_REF_NAME}-darwin-arm64"
+          package_dir="${RUNNER_TEMP}/${package_name}"
+          cmake --install build --prefix "${package_dir}" --component linkd
+          install -m 0644 README.md LICENSE "${package_dir}/"
+          mkdir -p "${package_dir}/share/insta360-linkd/proto/linkd/v1"
+          install -m 0644 proto/linkd/v1/control.proto \
+            "${package_dir}/share/insta360-linkd/proto/linkd/v1/"
+          install -m 0644 docs/grpc-api.md \
+            "${package_dir}/share/insta360-linkd/"
+          codesign --force --sign - "${package_dir}/bin/linkd"
+          codesign --verify --strict --verbose=2 "${package_dir}/bin/linkd"
+          file "${package_dir}/bin/linkd" | grep -q "arm64"
+          tar -C "${RUNNER_TEMP}" -czf "${package_name}.tar.gz" "${package_name}"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-darwin-arm64
+          path: insta360-linkd-*.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  linux-amd64:
+    name: Linux amd64
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libudev-dev ninja-build
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DLINKD_BUILD_TESTS=ON
+          -DLINKD_ENABLE_GRPC=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="insta360-linkd-${GITHUB_REF_NAME}-linux-amd64"
+          package_dir="${RUNNER_TEMP}/${package_name}"
+          cmake --install build --prefix "${package_dir}" --component linkd
+          install -m 0644 README.md LICENSE "${package_dir}/"
+          mkdir -p "${package_dir}/share/insta360-linkd/proto/linkd/v1"
+          install -m 0644 proto/linkd/v1/control.proto \
+            "${package_dir}/share/insta360-linkd/proto/linkd/v1/"
+          install -m 0644 docs/grpc-api.md packaging/99-insta360-linkd.rules \
+            "${package_dir}/share/insta360-linkd/"
+          file "${package_dir}/bin/linkd" | grep -q "x86-64"
+          tar -C "${RUNNER_TEMP}" -czf "${package_name}.tar.gz" "${package_name}"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux-amd64
+          path: insta360-linkd-*.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: github.ref_type == 'tag'
+    needs:
+      - darwin-arm64
+      - linux-amd64
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: dist
+        run: sha256sum ./*.tar.gz > SHA256SUMS
+
+      - name: Publish assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" dist/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --verify-tag \
+              --generate-notes \
+              --title "insta360-linkd ${GITHUB_REF_NAME}"
+          fi
