@@ -5,8 +5,10 @@
 #include "linkd/server.hpp"
 
 #include <atomic>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
 #include <iomanip>
@@ -41,9 +43,13 @@ void usage(std::ostream& output) {
 }
 
 double parse_number(std::string_view input, std::string_view name) {
-    double value = 0.0;
-    const auto result = std::from_chars(input.data(), input.data() + input.size(), value);
-    if (result.ec != std::errc{} || result.ptr != input.data() + input.size()) {
+    const std::string text(input);
+    char* end = nullptr;
+    errno = 0;
+    const double value = std::strtod(text.c_str(), &end);
+    if (text.empty() || end == text.c_str() ||
+        end != text.c_str() + text.size() || errno == ERANGE ||
+        !std::isfinite(value)) {
         throw CameraError("Invalid " + std::string(name) + ": " + std::string(input));
     }
     return value;
