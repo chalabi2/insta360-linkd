@@ -30,7 +30,7 @@ jobs:
 
       - name: Build and test
         run: |
-          cmake --build build --parallel
+          cmake --build build --target linkd linkd_core_tests linkd_grpc_tests --parallel
           ctest --test-dir build --output-on-failure
 
       - name: Package
@@ -80,7 +80,7 @@ jobs:
 
       - name: Build and test
         run: |
-          cmake --build build --parallel
+          cmake --build build --target linkd linkd_core_tests linkd_grpc_tests --parallel
           ctest --test-dir build --output-on-failure
 
       - name: Package
